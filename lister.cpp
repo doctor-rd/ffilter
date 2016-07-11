@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <time.h>
 #include <limits.h>
+#include <string.h>
 
 #include "lister.h"
 #include "gettaglist.h"
@@ -29,6 +30,8 @@ ListerOpts::ListerOpts() {
 
 Lister::Lister( const char *dirname ) {
 	d = opendir( dirname );
+	if( d == NULL )
+		throw std::string( strerror( errno ) ) + std::string( "\n" );
 }
 
 Lister::~Lister() {
@@ -61,6 +64,7 @@ std::list<FileAttr> Lister::doit( ListerOpts &opts ) {
 		fstat( fd, &s );
 		if( S_ISREG( s.st_mode ) ) {
 			FileAttr fa;
+			fa.name = std::string( name );
 
 			struct timespec tp;
 			clock_gettime( CLOCK_REALTIME, &tp );
@@ -70,11 +74,16 @@ std::list<FileAttr> Lister::doit( ListerOpts &opts ) {
 			if( tmp_maxage < fa.age )
 				goto stop;
 
-			fa.tags = getTagList( fd );
+			try {
+				fa.tags = getTagList( fd );
+			}
+			catch( std::string c ) {
+				close( fd );
+				throw fa.name + ": " + c;
+			}
 			if( !contains_sorted( tmp_tags, fa.tags ) )
 				goto stop;
 
-			fa.name = std::string( name );
 			res.push_back( fa );
 		}
 		stop:
